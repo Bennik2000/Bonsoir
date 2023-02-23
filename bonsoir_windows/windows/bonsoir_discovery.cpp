@@ -17,17 +17,18 @@ void DNSServiceResolveCallback(
     auto ip = gethostbyname(hosttarget);
     const char *ipAddress = inet_ntoa(*(in_addr *)ip->h_addr_list[0]);
 
-    auto bonsoirDiscovery = (BonsoirDiscovery *)context;
+    auto resolveContext = (ResolveContext *)context;
 
     std::string ipAddrStr = std::string(ipAddress);
     std::string fullnameStr = std::string(fullname);
     std::string hosttargetStr = std::string(hosttarget);
 
-    bonsoirDiscovery->onServiceResolved(
-        fullnameStr,
-        hosttargetStr,
-        ipAddrStr,
-        port);
+
+    Service service = resolveContext->serviceToResolve;
+    service.port = port;
+    service.serviceIp = ipAddrStr;
+
+    resolveContext->bonsoirDiscovery->onServiceResolved(service);
 
     printf(
         "RESOLVE:\n  fullname: %s\n  target: %s\n  rxtRecord: %s\n  port: %d\n  ip: %s\n",
@@ -58,40 +59,48 @@ void DNSServiceBrowseCallback(
     auto bonsoirDiscovery = (BonsoirDiscovery *)context;
 
     std::string serviceNameStr = std::string(serviceName);
-    std::string regtypeStr = std::string(regtype);
-    std::string serviceIpStr = std::string("");
 
     bool isNewBrowsed = (flags & kDNSServiceFlagsAdd) != 0;
 
-    if (isNewBrowsed) {
-        bonsoirDiscovery->onServiceFound(
+    if (isNewBrowsed)
+    {
+        std::string regtypeStr = std::string(regtype);
+        std::string serviceIpStr = std::string("");
+
+        Service service = Service(
             serviceNameStr,
             regtypeStr,
             serviceIpStr,
             0);
 
-        printf("FOUND: %s %s %s\n", serviceName, regtype, replyDomain);
-        std::cout << std::endl;
+        bool isAlreadyKnownAtOtherInterface = bonsoirDiscovery->onServiceFound(service);
 
-        DNSServiceRef ref;
-        DNSServiceResolve(
-            &ref,
-            0,
-            0,
-            serviceName,
-            regtype,
-            replyDomain,
-            DNSServiceResolveCallback,
-            context);
+        if (!isAlreadyKnownAtOtherInterface) {
+            printf("FOUND: %s %s %s\n", serviceName, regtype, replyDomain);
+            std::cout << std::endl;
 
-        DNSServiceProcessResult(ref);
-    }
-    else {
-        bonsoirDiscovery->onServiceLost(
-            serviceNameStr,
-            regtypeStr,
-            serviceIpStr,
-            0);
+            ResolveContext resolveContext;
+            resolveContext.bonsoirDiscovery = bonsoirDiscovery;
+            resolveContext.serviceToResolve = service;
+
+            DNSServiceRef ref;
+            DNSServiceResolve(
+                &ref,
+                0,
+                0,
+                serviceName,
+                regtype,
+                replyDomain,
+                DNSServiceResolveCallback,
+                &resolveContext);
+
+            DNSServiceProcessResult(ref);
+
+        }
+            }
+    else
+    {
+        bonsoirDiscovery->onServiceLost(serviceNameStr);
 
         printf("LOST: %s %s %s\n", serviceName, regtype, replyDomain);
         std::cout << std::endl;
@@ -131,55 +140,67 @@ void BonsoirDiscovery::stopDiscovery()
     this->eventSink->Success(EncodableMap{{EncodableValue("id"), EncodableValue("discoveryStopped")}});
 }
 
-void BonsoirDiscovery::onServiceFound(std::string &serviceName,
-                                      std::string &serviceType,
-                                      std::string &serviceIp,
-                                      int port)
+bool BonsoirDiscovery::onServiceFound(Service &service)
 {
+    std::cout << "onServiceFound " << service.serviceName << std::endl;
+    if (this->services.find(service.serviceName) != this->services.end())
+    {
+        return true;
+    }
+
+    this->services[service.serviceName] = service;
+
     this->eventSink->Success(
         EncodableMap{
             {EncodableValue("id"), EncodableValue("discoveryServiceFound")},
             {EncodableValue("service"), EncodableMap{
-                                            {EncodableValue("service.name"), EncodableValue(serviceName)},
-                                            {EncodableValue("service.type"), EncodableValue(serviceType)},
-                                            {EncodableValue("service.port"), EncodableValue(port)},
-                                            {EncodableValue("service.ip"), EncodableValue(serviceIp)},
+                                            {EncodableValue("service.name"), EncodableValue(service.serviceName)},
+                                            {EncodableValue("service.type"), EncodableValue(service.serviceType)},
+                                            {EncodableValue("service.port"), EncodableValue(service.port)},
+                                            {EncodableValue("service.ip"), EncodableValue(service.serviceIp)},
                                             {EncodableValue("service.attributes"), EncodableMap{}},
                                         }}});
+
+    return false;
 }
 
-void BonsoirDiscovery::onServiceResolved(std::string &serviceName,
-                                         std::string &serviceType,
-                                         std::string &serviceIp,
-                                         int port)
+void BonsoirDiscovery::onServiceResolved(Service &service)
 {
+    std::cout << "onServiceResolved " << service.serviceName << std::endl;
+    this->services[service.serviceName] = service;
+
     this->eventSink->Success(
         EncodableMap{
             {EncodableValue("id"), EncodableValue("discoveryServiceResolved")},
             {EncodableValue("service"), EncodableMap{
-                                            {EncodableValue("service.name"), EncodableValue(serviceName)},
-                                            {EncodableValue("service.type"), EncodableValue(serviceType)},
-                                            {EncodableValue("service.port"), EncodableValue(port)},
-                                            {EncodableValue("service.ip"), EncodableValue(serviceIp)},
+                                            {EncodableValue("service.name"), EncodableValue(service.serviceName)},
+                                            {EncodableValue("service.type"), EncodableValue(service.serviceType)},
+                                            {EncodableValue("service.port"), EncodableValue(service.port)},
+                                            {EncodableValue("service.ip"), EncodableValue(service.serviceIp)},
                                             {EncodableValue("service.attributes"), EncodableMap{}},
                                         }}});
 }
 
-void BonsoirDiscovery::onServiceLost(std::string &serviceName,
-                                     std::string &serviceType,
-                                     std::string &serviceIp,
-                                     int port)
+void BonsoirDiscovery::onServiceLost(std::string &serviceName)
 {
-    this->eventSink->Success(
-        EncodableMap{
-            {EncodableValue("id"), EncodableValue("discoveryServiceLost")},
-            {EncodableValue("service"), EncodableMap{
-                                            {EncodableValue("service.name"), EncodableValue(serviceName)},
-                                            {EncodableValue("service.type"), EncodableValue(serviceType)},
-                                            {EncodableValue("service.port"), EncodableValue(port)},
-                                            {EncodableValue("service.ip"), EncodableValue(serviceIp)},
-                                            {EncodableValue("service.attributes"), EncodableMap{}},
-                                        }}});
+    std::cout << "onServiceLost " << serviceName << std::endl;
+    if (this->services.find(serviceName) != this->services.end())
+    {
+        Service service = this->services[serviceName];
+
+        this->eventSink->Success(
+            EncodableMap{
+                {EncodableValue("id"), EncodableValue("discoveryServiceLost")},
+                {EncodableValue("service"), EncodableMap{
+                                                {EncodableValue("service.name"), EncodableValue(service.serviceName)},
+                                                {EncodableValue("service.type"), EncodableValue(service.serviceType)},
+                                                {EncodableValue("service.port"), EncodableValue(service.port)},
+                                                {EncodableValue("service.ip"), EncodableValue(service.serviceIp)},
+                                                {EncodableValue("service.attributes"), EncodableMap{}},
+                                            }}});
+
+        this->services.erase(serviceName);
+    }
 }
 
 void BonsoirDiscovery::messagePump()
@@ -188,4 +209,12 @@ void BonsoirDiscovery::messagePump()
     {
         DNSServiceProcessResult(*this->browse.get());
     }
+}
+
+Service::Service(std::string &serviceName, std::string &serviceType, std::string &serviceIp, int port)
+    : serviceName(serviceName),
+      serviceType(serviceType),
+      serviceIp(serviceIp),
+      port(port)
+{
 }

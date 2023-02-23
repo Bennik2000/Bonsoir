@@ -14,30 +14,22 @@ void DNSServiceResolveCallback(
     const unsigned char *txtRecord,
     void *context)
 {
+    if (errorCode != kDNSServiceErr_NoError)
+    {
+        // TODO: Handle error
+        return;
+    }
+
     auto ip = gethostbyname(hosttarget);
     const char *ipAddress = inet_ntoa(*(in_addr *)ip->h_addr_list[0]);
 
     auto resolveContext = (ResolveContext *)context;
 
-    std::string ipAddrStr = std::string(ipAddress);
-    std::string fullnameStr = std::string(fullname);
-    std::string hosttargetStr = std::string(hosttarget);
-
-
     Service service = resolveContext->serviceToResolve;
     service.port = port;
-    service.serviceIp = ipAddrStr;
+    service.serviceIp = std::string(ipAddress);
 
     resolveContext->bonsoirDiscovery->onServiceResolved(service);
-
-    printf(
-        "RESOLVE:\n  fullname: %s\n  target: %s\n  rxtRecord: %s\n  port: %d\n  ip: %s\n",
-        fullname,
-        hosttarget,
-        txtRecord,
-        port,
-        ipAddress);
-    std::cout << std::endl;
 }
 
 void DNSServiceBrowseCallback(
@@ -75,10 +67,8 @@ void DNSServiceBrowseCallback(
 
         bool isAlreadyKnownAtOtherInterface = bonsoirDiscovery->onServiceFound(service);
 
-        if (!isAlreadyKnownAtOtherInterface) {
-            printf("FOUND: %s %s %s\n", serviceName, regtype, replyDomain);
-            std::cout << std::endl;
-
+        if (!isAlreadyKnownAtOtherInterface)
+        {
             ResolveContext resolveContext;
             resolveContext.bonsoirDiscovery = bonsoirDiscovery;
             resolveContext.serviceToResolve = service;
@@ -95,16 +85,35 @@ void DNSServiceBrowseCallback(
                 &resolveContext);
 
             DNSServiceProcessResult(ref);
-
         }
-            }
+    }
     else
     {
         bonsoirDiscovery->onServiceLost(serviceNameStr);
-
-        printf("LOST: %s %s %s\n", serviceName, regtype, replyDomain);
-        std::cout << std::endl;
     }
+}
+
+BonsoirDiscovery::BonsoirDiscovery(BinaryMessenger *messenger, int id)
+{
+    eventChannel = std::make_shared<EventChannel<EncodableValue>>(
+        messenger,
+        "fr.skyost.bonsoir.discovery." + std::to_string(id),
+        &StandardMethodCodec::GetInstance());
+
+    eventChannel->SetStreamHandler(
+        std::make_unique<StreamHandlerFunctions<EncodableValue>>(
+            [this](const EncodableValue *arguments,
+                   std::unique_ptr<EventSink<EncodableValue>> &&events)
+                -> std::unique_ptr<StreamHandlerError<EncodableValue>>
+            {
+                this->eventSink = std::move(events);
+                return nullptr;
+            },
+            [](const EncodableValue *arguments)
+                -> std::unique_ptr<StreamHandlerError<EncodableValue>>
+            {
+                return nullptr;
+            }));
 }
 
 void BonsoirDiscovery::discoverServices(std::string &serviceType)
@@ -122,14 +131,21 @@ void BonsoirDiscovery::discoverServices(std::string &serviceType)
 
     if (error != kDNSServiceErr_NoError)
     {
-        this->eventSink->Error("discoveryError", "Bonsoir failed to start discovery", error);
+
+        if (eventSink != nullptr)
+        {
+            this->eventSink->Error("discoveryError", "Bonsoir failed to start discovery", error);
+        }
         return;
     }
 
     this->messagePumpThread = std::make_unique<std::thread>(&BonsoirDiscovery::messagePump, this);
     this->messagePumpThread->detach();
 
-    this->eventSink->Success(EncodableMap{{EncodableValue("id"), EncodableValue("discoveryStarted")}});
+    if (eventSink != nullptr)
+    {
+        this->eventSink->Success(EncodableMap{{EncodableValue("id"), EncodableValue("discoveryStarted")}});
+    }
 }
 
 void BonsoirDiscovery::stopDiscovery()
@@ -137,12 +153,15 @@ void BonsoirDiscovery::stopDiscovery()
     DNSServiceRefDeallocate(*this->browse.release());
 
     this->browse = nullptr;
-    this->eventSink->Success(EncodableMap{{EncodableValue("id"), EncodableValue("discoveryStopped")}});
+
+    if (eventSink != nullptr)
+    {
+        this->eventSink->Success(EncodableMap{{EncodableValue("id"), EncodableValue("discoveryStopped")}});
+    }
 }
 
 bool BonsoirDiscovery::onServiceFound(Service &service)
 {
-    std::cout << "onServiceFound " << service.serviceName << std::endl;
     if (this->services.find(service.serviceName) != this->services.end())
     {
         return true;
@@ -150,47 +169,11 @@ bool BonsoirDiscovery::onServiceFound(Service &service)
 
     this->services[service.serviceName] = service;
 
-    this->eventSink->Success(
-        EncodableMap{
-            {EncodableValue("id"), EncodableValue("discoveryServiceFound")},
-            {EncodableValue("service"), EncodableMap{
-                                            {EncodableValue("service.name"), EncodableValue(service.serviceName)},
-                                            {EncodableValue("service.type"), EncodableValue(service.serviceType)},
-                                            {EncodableValue("service.port"), EncodableValue(service.port)},
-                                            {EncodableValue("service.ip"), EncodableValue(service.serviceIp)},
-                                            {EncodableValue("service.attributes"), EncodableMap{}},
-                                        }}});
-
-    return false;
-}
-
-void BonsoirDiscovery::onServiceResolved(Service &service)
-{
-    std::cout << "onServiceResolved " << service.serviceName << std::endl;
-    this->services[service.serviceName] = service;
-
-    this->eventSink->Success(
-        EncodableMap{
-            {EncodableValue("id"), EncodableValue("discoveryServiceResolved")},
-            {EncodableValue("service"), EncodableMap{
-                                            {EncodableValue("service.name"), EncodableValue(service.serviceName)},
-                                            {EncodableValue("service.type"), EncodableValue(service.serviceType)},
-                                            {EncodableValue("service.port"), EncodableValue(service.port)},
-                                            {EncodableValue("service.ip"), EncodableValue(service.serviceIp)},
-                                            {EncodableValue("service.attributes"), EncodableMap{}},
-                                        }}});
-}
-
-void BonsoirDiscovery::onServiceLost(std::string &serviceName)
-{
-    std::cout << "onServiceLost " << serviceName << std::endl;
-    if (this->services.find(serviceName) != this->services.end())
+    if (eventSink != nullptr)
     {
-        Service service = this->services[serviceName];
-
         this->eventSink->Success(
             EncodableMap{
-                {EncodableValue("id"), EncodableValue("discoveryServiceLost")},
+                {EncodableValue("id"), EncodableValue("discoveryServiceFound")},
                 {EncodableValue("service"), EncodableMap{
                                                 {EncodableValue("service.name"), EncodableValue(service.serviceName)},
                                                 {EncodableValue("service.type"), EncodableValue(service.serviceType)},
@@ -198,6 +181,49 @@ void BonsoirDiscovery::onServiceLost(std::string &serviceName)
                                                 {EncodableValue("service.ip"), EncodableValue(service.serviceIp)},
                                                 {EncodableValue("service.attributes"), EncodableMap{}},
                                             }}});
+    }
+
+    return false;
+}
+
+void BonsoirDiscovery::onServiceResolved(Service &service)
+{
+    this->services[service.serviceName] = service;
+
+    if (eventSink != nullptr)
+    {
+        this->eventSink->Success(
+            EncodableMap{
+                {EncodableValue("id"), EncodableValue("discoveryServiceResolved")},
+                {EncodableValue("service"), EncodableMap{
+                                                {EncodableValue("service.name"), EncodableValue(service.serviceName)},
+                                                {EncodableValue("service.type"), EncodableValue(service.serviceType)},
+                                                {EncodableValue("service.port"), EncodableValue(service.port)},
+                                                {EncodableValue("service.ip"), EncodableValue(service.serviceIp)},
+                                                {EncodableValue("service.attributes"), EncodableMap{}},
+                                            }}});
+    }
+}
+
+void BonsoirDiscovery::onServiceLost(std::string &serviceName)
+{
+    if (this->services.find(serviceName) != this->services.end())
+    {
+        Service service = this->services[serviceName];
+
+        if (eventSink != nullptr)
+        {
+            this->eventSink->Success(
+                EncodableMap{
+                    {EncodableValue("id"), EncodableValue("discoveryServiceLost")},
+                    {EncodableValue("service"), EncodableMap{
+                                                    {EncodableValue("service.name"), EncodableValue(service.serviceName)},
+                                                    {EncodableValue("service.type"), EncodableValue(service.serviceType)},
+                                                    {EncodableValue("service.port"), EncodableValue(service.port)},
+                                                    {EncodableValue("service.ip"), EncodableValue(service.serviceIp)},
+                                                    {EncodableValue("service.attributes"), EncodableMap{}},
+                                                }}});
+        }
 
         this->services.erase(serviceName);
     }
@@ -209,12 +235,4 @@ void BonsoirDiscovery::messagePump()
     {
         DNSServiceProcessResult(*this->browse.get());
     }
-}
-
-Service::Service(std::string &serviceName, std::string &serviceType, std::string &serviceIp, int port)
-    : serviceName(serviceName),
-      serviceType(serviceType),
-      serviceIp(serviceIp),
-      port(port)
-{
 }

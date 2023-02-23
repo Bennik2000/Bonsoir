@@ -16,8 +16,6 @@
 
 namespace bonsoir_windows
 {
-
-	// static
 	void BonsoirWindowsPlugin::RegisterWithRegistrar(
 		flutter::PluginRegistrarWindows* registrar)
 	{
@@ -47,82 +45,43 @@ namespace bonsoir_windows
 	{
 		std::cout << "HandleMethodCall " << method_call.method_name() << std::endl;
 
-		int id = this->GetInt32Argument("id", method_call);
+		int id = GetInt32Argument("id", method_call);
 
 		if (method_call.method_name().compare("broadcast.initialize") == 0)
 		{
-			// TODO: Setup BonsoirBroadcastListener
+			broadcasts[id] = std::make_shared<BonsoirBroadcast>(messenger, id);
 			result->Success(true);
 		}
 		else if (method_call.method_name().compare("broadcast.start") == 0)
 		{
-			int servicePort = this->GetInt32Argument("service.port", method_call);
-			std::string serviceType = this->GetStringArgument("service.type", method_call);
-			std::string serviceName = this->GetStringArgument("service.name", method_call);
-
-			this->broadcasts[id] = std::make_unique<DNSServiceRef>();
-
-			DNSServiceRegister(
-				this->broadcasts[id].get(),
-				0,
-				0,
-				serviceName.c_str(),
-				serviceType.c_str(),
-				NULL,
-				NULL,
-				(uint16_t)servicePort,
-				0,
-				NULL,
-				NULL,
-				NULL
-			);
-
+			Service service;
+			service.port = GetInt32Argument("service.port", method_call);
+			service.serviceName = GetStringArgument("service.name", method_call);
+			service.serviceType = GetStringArgument("service.type", method_call);
+			broadcasts[id]->startBroadcast(service);
 			result->Success(true);
 		}
 		else if (method_call.method_name().compare("broadcast.stop") == 0)
 		{
-			DNSServiceRefDeallocate(
-				*this->broadcasts[id].release()
-			);
-
-			this->broadcasts.erase(id);
-
+			broadcasts[id]->stopBroadcast();
+			broadcasts.erase(id);
 			result->Success(true);
 		}
 		else if (method_call.method_name().compare("discovery.initialize") == 0)
 		{
-			this->discovery[id] = std::make_shared<BonsoirDiscovery>(this->messenger, id);
-
-			// TODO: Setup discovery listener
-			// Event Channel: EventChannel(messenger, "${BonsoirPlugin.channel}.discovery.$id")
-			// Get eventSink from eventChannel.setStreamHandler
-			// Event: eventSink?.success(SuccessObject("discoveryStarted").toJson())
-			// Event: eventSink?.error("discoveryError", "Bonsoir failed to start discovery", errorCode)
-			// Event: eventSink?.success(SuccessObject("discoveryServiceFound", service).toJson(resolver.getResolvedServiceIpAddress(service)))
-			// Event: eventSink?.success(SuccessObject("discoveryServiceLost", service).toJson(resolvedServiceInfo))
-			// Event: eventSink?.success(SuccessObject("discoveryStopped").toJson())
-			// Event: eventSink?.error("discoveryError", "Bonsoir has encountered an error while stopping the discovery", errorCode)
-			// Event: eventSink?.success(SuccessObject("discoveryServiceResolved", service).toJson(resolver.getResolvedServiceIpAddress(service)))
-			// Event: eventSink?.success(SuccessObject("discoveryServiceResolveFailed", service).toJson(resolver.getResolvedServiceIpAddress(service)))
-			
-
-			//bool printLogs = this->GetBooleanArgument("printLogs", method_call);
+			discovery[id] = std::make_shared<BonsoirDiscovery>(messenger, id);
 			result->Success(true);
 		}
 		else if (method_call.method_name().compare("discovery.start") == 0)
 		{
-			std::string serviceType = this->GetStringArgument("type", method_call);
-			std::cout << "serviceType: " << serviceType << std::endl;
-			
+			std::string serviceType = GetStringArgument("type", method_call);
 			discovery[id]->discoverServices(serviceType);
-
 			result->Success(true);
 		}
 		else if (method_call.method_name().compare("discovery.stop") == 0)
 		{
 			discovery[id]->stopDiscovery();
 			discovery.erase(id);
-
 			result->Success(true);
 		}
 		else

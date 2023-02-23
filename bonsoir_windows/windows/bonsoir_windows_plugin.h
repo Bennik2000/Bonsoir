@@ -8,13 +8,14 @@
 #include <dns_sd.h>
 #include <thread>
 #include "bonsoir_discovery.h"
+#include "bonsoir_broadcast.h"
 
 namespace bonsoir_windows {
 
 	class BonsoirWindowsPlugin : public flutter::Plugin {
 
 	private:
-		std::map<int, std::unique_ptr<DNSServiceRef>> broadcasts;
+		std::map<int, std::shared_ptr<BonsoirBroadcast>> broadcasts;
 		std::map<int, std::shared_ptr<BonsoirDiscovery>> discovery;
 		flutter::BinaryMessenger* messenger;
 		
@@ -38,8 +39,6 @@ namespace bonsoir_windows {
 		std::string GetStringArgument(std::string key, const flutter::MethodCall<flutter::EncodableValue>& method_call);
 		bool GetBooleanArgument(std::string key, const flutter::MethodCall<flutter::EncodableValue>& method_call);
 		int GetInt32Argument(std::string key, const flutter::MethodCall<flutter::EncodableValue>& method_call);
-
-		void BonjourMessatePump();
 	};
 }
 

@@ -26,7 +26,7 @@ void DNSServiceRegisterCallback(
 class BonsoirBroadcast
 {
 private:
-    std::unique_ptr<DNSServiceRef> broadcast;
+    DNSServiceRef broadcast;
     std::shared_ptr<flutter::EventSink<flutter::EncodableValue>> eventSink;
     std::shared_ptr<flutter::EventChannel<flutter::EncodableValue>> eventChannel;
 

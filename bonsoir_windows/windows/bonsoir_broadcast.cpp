@@ -49,10 +49,10 @@ BonsoirBroadcast::BonsoirBroadcast(BinaryMessenger *messenger, int id)
 void BonsoirBroadcast::startBroadcast(Service &serviceToBroadcast)
 {
     this->service = serviceToBroadcast;
-    this->broadcast = std::make_unique<DNSServiceRef>();
+    this->broadcast = DNSServiceRef();
 
     auto error = DNSServiceRegister(
-        this->broadcast.get(),
+        &this->broadcast,
         0,
         0,
         service.serviceName.c_str(),
@@ -73,8 +73,7 @@ void BonsoirBroadcast::startBroadcast(Service &serviceToBroadcast)
 
 void BonsoirBroadcast::stopBroadcast()
 {
-    DNSServiceRefDeallocate(*this->broadcast.release());
-    this->broadcast = nullptr;
+    DNSServiceRefDeallocate(this->broadcast);
 
     if (eventSink != nullptr)
     {

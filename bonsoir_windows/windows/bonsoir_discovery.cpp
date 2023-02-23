@@ -118,10 +118,10 @@ BonsoirDiscovery::BonsoirDiscovery(BinaryMessenger *messenger, int id)
 
 void BonsoirDiscovery::discoverServices(std::string &serviceType)
 {
-    this->browse = std::make_unique<DNSServiceRef>();
+    this->browse = DNSServiceRef();
 
     auto error = DNSServiceBrowse(
-        this->browse.get(),
+        &this->browse,
         0,
         0,
         serviceType.c_str(),
@@ -139,9 +139,10 @@ void BonsoirDiscovery::discoverServices(std::string &serviceType)
         return;
     }
 
-    this->messagePumpThread = std::make_unique<std::thread>(&BonsoirDiscovery::messagePump, this);
-    this->messagePumpThread->detach();
+    isBrowsing.store(1, std::memory_order_release);
 
+    this->messagePumpThread = std::thread(&BonsoirDiscovery::messagePump, this);
+    
     if (eventSink != nullptr)
     {
         this->eventSink->Success(EncodableMap{{EncodableValue("id"), EncodableValue("discoveryStarted")}});
@@ -150,9 +151,11 @@ void BonsoirDiscovery::discoverServices(std::string &serviceType)
 
 void BonsoirDiscovery::stopDiscovery()
 {
-    DNSServiceRefDeallocate(*this->browse.release());
+    isBrowsing.store(0, std::memory_order_release);
+    
+    DNSServiceRefDeallocate(this->browse);
 
-    this->browse = nullptr;
+    messagePumpThread.join();
 
     if (eventSink != nullptr)
     {
@@ -231,8 +234,8 @@ void BonsoirDiscovery::onServiceLost(std::string &serviceName)
 
 void BonsoirDiscovery::messagePump()
 {
-    while (this->browse != nullptr)
+    while (isBrowsing.load(std::memory_order_acquire) != 0)
     {
-        DNSServiceProcessResult(*this->browse.get());
+        DNSServiceProcessResult(this->browse);
     }
 }

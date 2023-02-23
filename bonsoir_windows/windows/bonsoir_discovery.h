@@ -51,8 +51,9 @@ void DNSServiceBrowseCallback(
 class BonsoirDiscovery
 {
 private:
-	std::unique_ptr<DNSServiceRef> browse;
-	std::unique_ptr<std::thread> messagePumpThread;
+	DNSServiceRef browse;
+	std::atomic<int> isBrowsing = 0;
+	std::thread messagePumpThread;
 	std::shared_ptr<flutter::EventSink<flutter::EncodableValue>> eventSink;
 	std::shared_ptr<flutter::EventChannel<flutter::EncodableValue>> eventChannel;
 

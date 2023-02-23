@@ -12,27 +12,27 @@
 
 #include <dns_sd.h>
 
-
+using namespace flutter;
 
 namespace bonsoir_windows
 {
 	void BonsoirWindowsPlugin::RegisterWithRegistrar(
-		flutter::PluginRegistrarWindows* registrar)
+		PluginRegistrarWindows *registrar)
 	{
 		auto messenger = registrar->messenger();
 
 		auto channel =
-			std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+			std::make_unique<MethodChannel<EncodableValue>>(
 				messenger, "fr.skyost.bonsoir",
-				&flutter::StandardMethodCodec::GetInstance());
+				&StandardMethodCodec::GetInstance());
 
 		auto plugin = std::make_unique<BonsoirWindowsPlugin>(messenger);
 
 		channel->SetMethodCallHandler(
-			[plugin_pointer = plugin.get()](const auto& call, auto result)
-		{
-			plugin_pointer->HandleMethodCall(call, std::move(result));
-		});
+			[plugin_pointer = plugin.get()](const auto &call, auto result)
+			{
+				plugin_pointer->HandleMethodCall(call, std::move(result));
+			});
 
 		registrar->AddPlugin(std::move(plugin));
 	}
@@ -40,8 +40,8 @@ namespace bonsoir_windows
 	BonsoirWindowsPlugin::~BonsoirWindowsPlugin() {}
 
 	void BonsoirWindowsPlugin::HandleMethodCall(
-		const flutter::MethodCall<flutter::EncodableValue>& method_call,
-		std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result)
+		const MethodCall<EncodableValue> &method_call,
+		std::unique_ptr<MethodResult<EncodableValue>> result)
 	{
 		std::cout << "HandleMethodCall " << method_call.method_name() << std::endl;
 
@@ -91,38 +91,44 @@ namespace bonsoir_windows
 		}
 	}
 
-	std::string BonsoirWindowsPlugin::GetStringArgument(std::string key, const flutter::MethodCall<flutter::EncodableValue>& method_call)
+	std::string BonsoirWindowsPlugin::GetStringArgument(std::string key, const MethodCall<EncodableValue> &method_call)
 	{
-		const auto* arguments = std::get_if<flutter::EncodableMap>(method_call.arguments());
+		const auto *arguments = std::get_if<EncodableMap>(method_call.arguments());
 
-		if (!arguments) return std::string();
+		if (!arguments)
+			return std::string();
 
-		auto value_entry = arguments->find(flutter::EncodableValue(key));
-		if (value_entry == arguments->end()) return std::string();
+		auto value_entry = arguments->find(EncodableValue(key));
+		if (value_entry == arguments->end())
+			return std::string();
 
 		return std::get<std::string>(value_entry->second);
 	}
 
-	bool BonsoirWindowsPlugin::GetBooleanArgument(std::string key, const flutter::MethodCall<flutter::EncodableValue>& method_call)
+	bool BonsoirWindowsPlugin::GetBooleanArgument(std::string key, const MethodCall<EncodableValue> &method_call)
 	{
-		const auto* arguments = std::get_if<flutter::EncodableMap>(method_call.arguments());
+		const auto *arguments = std::get_if<EncodableMap>(method_call.arguments());
 
-		if (!arguments) return false;
+		if (!arguments)
+			return false;
 
-		auto value_entry = arguments->find(flutter::EncodableValue(key));
-		if (value_entry == arguments->end()) return nullptr;
+		auto value_entry = arguments->find(EncodableValue(key));
+		if (value_entry == arguments->end())
+			return nullptr;
 
 		return std::get<bool>(value_entry->second);
 	}
 
-	int BonsoirWindowsPlugin::GetInt32Argument(std::string key, const flutter::MethodCall<flutter::EncodableValue>& method_call)
+	int BonsoirWindowsPlugin::GetInt32Argument(std::string key, const MethodCall<EncodableValue> &method_call)
 	{
-		const auto* arguments = std::get_if<flutter::EncodableMap>(method_call.arguments());
+		const auto *arguments = std::get_if<EncodableMap>(method_call.arguments());
 
-		if (!arguments) return false;
+		if (!arguments)
+			return false;
 
-		auto value_entry = arguments->find(flutter::EncodableValue(key));
-		if (value_entry == arguments->end()) return 0;
+		auto value_entry = arguments->find(EncodableValue(key));
+		if (value_entry == arguments->end())
+			return 0;
 
 		return std::get<int>(value_entry->second);
 	}

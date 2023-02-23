@@ -1,8 +1,3 @@
+import 'package:bonsoir_platform_interface/bonsoir_platform_interface.dart';
 
-import 'bonsoir_windows_platform_interface.dart';
-
-class BonsoirWindows {
-  Future<String?> getPlatformVersion() {
-    return BonsoirWindowsPlatform.instance.getPlatformVersion();
-  }
-}
+class BonsoirWindows extends MethodChannelBonsoir {}

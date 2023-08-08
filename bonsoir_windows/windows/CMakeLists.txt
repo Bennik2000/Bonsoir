@@ -49,13 +49,13 @@ target_include_directories(${PLUGIN_NAME} INTERFACE
 target_include_directories(
   ${PLUGIN_NAME}
   PRIVATE
-  "C:/Program Files/Bonjour SDK/Include/"
+  "include/"
 )
 
 target_link_libraries(
   ${PLUGIN_NAME} 
   PRIVATE
-  "C:/Program Files/Bonjour SDK/Lib/x64/dnssd.lib"
+  "${CMAKE_CURRENT_SOURCE_DIR}/lib/x64/dnssd.lib"
 )
 
 target_link_libraries(
